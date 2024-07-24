@@ -120,6 +120,11 @@ test('should open simple trace viewer', async ({ showTraceViewer }) => {
   ]);
 });
 
+test('should complain about newer version of trace in old viewer', async ({ showTraceViewer, asset }, testInfo) => {
+  const traceViewer = await showTraceViewer([asset('trace-from-the-future.zip')]);
+  await expect(traceViewer.page.getByText('The trace was created by a newer version of Playwright and is not supported by this version of the viewer.')).toBeVisible();
+});
+
 test('should contain action info', async ({ showTraceViewer }) => {
   const traceViewer = await showTraceViewer([traceFile]);
   await traceViewer.selectAction('locator.click');
@@ -426,6 +431,32 @@ test('should work with adopted style sheets and all: unset', async ({ page, runA
     await expect(frame.locator('button')).toHaveCSS('background-color', 'rgb(0, 191, 255)');
     await expect(frame.locator('button')).toHaveCSS('color', 'rgb(0, 0, 0)');
     await expect(frame.locator('button')).toHaveCSS('padding', '5px');
+  }
+});
+
+test('should work with nesting CSS selectors', async ({ page, runAndTrace }) => {
+  test.info().annotations.push({ type: 'issue', description: 'https://github.com/microsoft/playwright/issues/31607' });
+
+  const traceViewer = await runAndTrace(async () => {
+    await page.setContent(`
+      <span class="foo" data-testid="green-element">Hi</span>
+      <span class="foo bar" data-testid="red-element">Hello</span>
+      <style>
+        .foo {
+          color: green;
+
+          &.bar {
+            color: red;
+          }
+        }
+      </style>
+      `);
+    await page.evaluate(() => { });
+  });
+  {
+    const frame = await traceViewer.snapshotFrame('page.evaluate', 0);
+    await expect(frame.getByTestId('green-element')).toHaveCSS('color', /* green */'rgb(0, 128, 0)');
+    await expect(frame.getByTestId('red-element')).toHaveCSS('color', /* red */'rgb(255, 0, 0)');
   }
 });
 
@@ -1256,6 +1287,17 @@ test('should open snapshot in new browser context', async ({ browser, page, runA
   await newPage.close();
 });
 
+test('should show similar actions from library-only trace', async ({ showTraceViewer, asset }) => {
+  const traceViewer = await showTraceViewer([asset('trace-library-1.46.zip')]);
+  await expect(traceViewer.actionTitles).toHaveText([
+    /page.setContent/,
+    /locator.getAttributelocator\('div'\)/,
+    /locator.isVisiblelocator\('div'\)/,
+    /locator.getAttributelocator\('div'\)/,
+    /locator.isVisiblelocator\('div'\)/,
+  ]);
+});
+
 function parseMillis(s: string): number {
   const matchMs = s.match(/(\d+)ms/);
   if (matchMs)
@@ -1289,4 +1331,40 @@ test('should show correct request start time', {
   const duration =  await line.locator('.grid-view-column-duration').textContent();
   expect(parseMillis(duration)).toBeGreaterThan(1000);
   expect(parseMillis(start)).toBeLessThan(1000);
+});
+
+test('should allow hiding route actions', {
+  annotation: { type: 'issue', description: 'https://github.com/microsoft/playwright/issues/30970' },
+}, async ({ page, runAndTrace, server }) => {
+  const traceViewer = await runAndTrace(async () => {
+    await page.route('**/*', async route => {
+      await route.fulfill({ contentType: 'text/html', body: 'Yo, page!' });
+    });
+    await page.goto(server.EMPTY_PAGE);
+  });
+
+  // Routes are visible by default.
+  await expect(traceViewer.actionTitles).toHaveText([
+    /page.route/,
+    /page.goto.*empty.html/,
+    /route.fulfill/,
+  ]);
+
+  await traceViewer.page.getByText('Settings').click();
+  await expect(traceViewer.page.getByRole('checkbox', { name: 'Show route actions' })).toBeChecked();
+  await traceViewer.page.getByRole('checkbox', { name: 'Show route actions' }).uncheck();
+  await traceViewer.page.getByText('Actions', { exact: true }).click();
+  await expect(traceViewer.actionTitles).toHaveText([
+    /page.route/,
+    /page.goto.*empty.html/,
+  ]);
+
+  await traceViewer.page.getByText('Settings').click();
+  await traceViewer.page.getByRole('checkbox', { name: 'Show route actions' }).check();
+  await traceViewer.page.getByText('Actions', { exact: true }).click();
+  await expect(traceViewer.actionTitles).toHaveText([
+    /page.route/,
+    /page.goto.*empty.html/,
+    /route.fulfill/,
+  ]);
 });

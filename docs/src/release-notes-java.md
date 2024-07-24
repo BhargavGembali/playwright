@@ -1008,7 +1008,7 @@ This version was also tested against the following stable channels:
 
 ### Announcements
 
-- v1.20 is the last release to receive WebKit update for macOS 10.15 Catalina. Please update MacOS to keep using latest & greatest WebKit!
+- v1.20 is the last release to receive WebKit update for macOS 10.15 Catalina. Please update macOS to keep using latest & greatest WebKit!
 
 ### Browser Versions
 
@@ -1457,7 +1457,7 @@ This version of Playwright was also tested against the following stable channels
 
 #### New APIs
 
-- [`browserType.launch()`](./api/class-browsertype#browsertypelaunchoptions) now accepts the new `'channel'` option. Read more in [our documentation](./browsers).
+- [`method: BrowserType.launch`] now accepts the new `'channel'` option. Read more in [our documentation](./browsers).
 
 
 ## Version 1.9

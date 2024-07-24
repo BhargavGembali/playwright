@@ -20,6 +20,7 @@ import { ActionList } from './actionList';
 import { CallTab } from './callTab';
 import { LogTab } from './logTab';
 import { ErrorsTab, useErrorsTabModel } from './errorsTab';
+import type { ConsoleEntry } from './consoleTab';
 import { ConsoleTab, useConsoleTabModel } from './consoleTab';
 import type * as modelUtil from './modelUtil';
 import type { ActionTraceEventInContext, MultiTraceModel } from './modelUtil';
@@ -40,6 +41,7 @@ import type { Entry } from '@trace/har';
 import './workbench.css';
 import { testStatusIcon, testStatusText } from './testUtils';
 import type { UITestStatus } from './testUtils';
+import { SettingsView } from './settingsView';
 
 export const Workbench: React.FunctionComponent<{
   model?: MultiTraceModel,
@@ -57,6 +59,7 @@ export const Workbench: React.FunctionComponent<{
   const [revealedStack, setRevealedStack] = React.useState<StackFrame[] | undefined>(undefined);
   const [highlightedAction, setHighlightedAction] = React.useState<ActionTraceEventInContext | undefined>();
   const [highlightedEntry, setHighlightedEntry] = React.useState<Entry | undefined>();
+  const [highlightedConsoleMessage, setHighlightedConsoleMessage] = React.useState<ConsoleEntry | undefined>();
   const [selectedNavigatorTab, setSelectedNavigatorTab] = React.useState<string>('actions');
   const [selectedPropertiesTab, setSelectedPropertiesTab] = useSetting<string>('propertiesTab', showSourcesFirst ? 'source' : 'call');
   const [isInspecting, setIsInspecting] = React.useState(false);
@@ -64,6 +67,11 @@ export const Workbench: React.FunctionComponent<{
   const activeAction = model ? highlightedAction || selectedAction : undefined;
   const [selectedTime, setSelectedTime] = React.useState<Boundaries | undefined>();
   const [sidebarLocation, setSidebarLocation] = useSetting<'bottom' | 'right'>('propertiesSidebarLocation', 'bottom');
+  const [showRouteActions, , showRouteActionsSetting] = useSetting('show-route-actions', true, 'Show route actions');
+
+  const filteredActions = React.useMemo(() => {
+    return (model?.actions || []).filter(action => showRouteActions || action.class !== 'Route');
+  }, [model, showRouteActions]);
 
   const setSelectedAction = React.useCallback((action: ActionTraceEventInContext | undefined) => {
     setSelectedActionImpl(action);
@@ -167,7 +175,13 @@ export const Workbench: React.FunctionComponent<{
     id: 'console',
     title: 'Console',
     count: consoleModel.entries.length,
-    render: () => <ConsoleTab consoleModel={consoleModel} boundaries={boundaries} selectedTime={selectedTime} />
+    render: () => <ConsoleTab
+      consoleModel={consoleModel}
+      boundaries={boundaries}
+      selectedTime={selectedTime}
+      onAccepted={m => setSelectedTime({ minimum: m.timestamp, maximum: m.timestamp })}
+      onEntryHovered={setHighlightedConsoleMessage}
+    />
   };
   const networkTab: TabbedPaneTabModel = {
     id: 'network',
@@ -218,9 +232,11 @@ export const Workbench: React.FunctionComponent<{
   return <div className='vbox workbench' {...(inert ? { inert: 'true' } : {})}>
     <Timeline
       model={model}
+      consoleEntries={consoleModel.entries}
       boundaries={boundaries}
       highlightedAction={highlightedAction}
       highlightedEntry={highlightedEntry}
+      highlightedConsoleEntry={highlightedConsoleMessage}
       onSelected={onActionSelected}
       sdkLanguage={sdkLanguage}
       selectedTime={selectedTime}
@@ -251,7 +267,7 @@ export const Workbench: React.FunctionComponent<{
                 </div>}
                 <ActionList
                   sdkLanguage={sdkLanguage}
-                  actions={model?.actions || []}
+                  actions={filteredActions}
                   selectedAction={model ? selectedAction : undefined}
                   selectedTime={selectedTime}
                   setSelectedTime={setSelectedTime}
@@ -267,8 +283,15 @@ export const Workbench: React.FunctionComponent<{
               title: 'Metadata',
               component: <MetadataView model={model}/>
             },
+            {
+              id: 'settings',
+              title: 'Settings',
+              component: <SettingsView settings={[showRouteActionsSetting]}/>,
+            }
           ]}
-          selectedTab={selectedNavigatorTab} setSelectedTab={setSelectedNavigatorTab}/>
+          selectedTab={selectedNavigatorTab}
+          setSelectedTab={setSelectedNavigatorTab}
+        />
       </SplitView>
       <TabbedPane
         tabs={tabs}

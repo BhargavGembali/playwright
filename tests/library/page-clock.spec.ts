@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { test, expect } from './pageTest';
+import { browserTest as test, expect } from '../config/browserTest';
 
 test.skip(!!process.env.PW_CLOCK);
 
@@ -508,5 +508,27 @@ it.describe('while on pause', () => {
     expect(calls).toEqual([{ params: ['outer'] }]);
     await page.clock.runFor(1);
     expect(calls).toEqual([{ params: ['outer'] }, { params: ['inner'] }]);
+  });
+});
+
+it.describe('Date.now', () => {
+  it('check Date.now is an integer', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('data:text/html,');
+    await page.waitForTimeout(1000);
+    const dateValue = await page.evaluate('Date.now()');
+    expect(Number.isInteger(dateValue)).toBeTruthy();
+    await page.waitForTimeout(1000);
+    const dateValue2 = await page.evaluate('Date.now()');
+    expect(Number.isInteger(dateValue2)).toBeTruthy();
+  });
+
+  it('check Date.now is an integer (2)', async ({ page }) => {
+    await page.clock.install({ time: 0 });
+    await page.goto('data:text/html,');
+    await page.clock.pauseAt(1000);
+    await page.clock.runFor(0.5);
+    const dateValue = await page.evaluate('Date.now()');
+    expect(dateValue).toBe(1001);
   });
 });
