@@ -25,6 +25,7 @@ import { deviceDescriptors } from '../deviceDescriptors';
 import { JavaScriptFormatter } from './javascript';
 import { escapeWithQuotes } from '../../utils/isomorphic/stringUtils';
 import { asLocator } from '../../utils/isomorphic/locatorGenerators';
+import { dynamicValues, valueIndex } from '../../client/dynamicValues'; 
 
 type JavaLanguageMode = 'library' | 'junit';
 
@@ -130,13 +131,20 @@ export class JavaLanguageGenerator implements LanguageGenerator {
       case 'uncheck':
         return `${subject}.${this._asLocator(action.selector, inFrameLocator)}.uncheck();`;
       case 'fill':
-        return `${subject}.${this._asLocator(action.selector, inFrameLocator)}.fill(${quote(action.text)});`;
+          // Retrieve the dynamic value index
+          let index: number;
+          if (typeof action.text === 'string' && action.text in valueIndex) {
+            index = valueIndex[action.text];
+          } else {
+            index = +action.text; // Assuming action.text can be an index directly if not a string
+          }
+          return `await ${subject}.${this._asLocator(action.selector)}.fill(dynamicValues[${index}]);`;
       case 'setInputFiles':
-        return `${subject}.${this._asLocator(action.selector, inFrameLocator)}.setInputFiles(${formatPath(action.files.length === 1 ? action.files[0] : action.files)});`;
+        return `await ${subject}.${this._asLocator(action.selector)}.SetInputFilesAsync(${formatObject(action.files)});`;
       case 'press': {
         const modifiers = toModifiers(action.modifiers);
         const shortcut = [...modifiers, action.key].join('+');
-        return `${subject}.${this._asLocator(action.selector, inFrameLocator)}.press(${quote(shortcut)});`;
+        return `await ${subject}.${this._asLocator(action.selector)}.PressAsync(${quote(shortcut)});`;
       }
       case 'navigate':
         return `${subject}.navigate(${quote(action.url)});`;
@@ -200,15 +208,6 @@ export class JavaLanguageGenerator implements LanguageGenerator {
   }
 }`;
   }
-}
-
-function formatPath(files: string | string[]): string {
-  if (Array.isArray(files)) {
-    if (files.length === 0)
-      return 'new Path[0]';
-    return `new Path[] {${files.map(s => 'Paths.get(' + quote(s) + ')').join(', ')}}`;
-  }
-  return `Paths.get(${quote(files)})`;
 }
 
 function formatSelectOption(options: string | string[]): string {

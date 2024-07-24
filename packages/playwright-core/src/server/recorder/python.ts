@@ -19,6 +19,7 @@ import type { Language, LanguageGenerator, LanguageGeneratorOptions } from './la
 import { sanitizeDeviceOptions, toSignalMap } from './language';
 import type { ActionInContext } from './codeGenerator';
 import type { Action } from './recorderActions';
+import { dynamicValues, valueIndex } from '../../client/dynamicValues'; 
 import type { MouseClickOptions } from './utils';
 import { toModifiers } from './utils';
 import { escapeWithQuotes, toSnakeCase } from '../../utils/isomorphic/stringUtils';
@@ -122,7 +123,15 @@ export class PythonLanguageGenerator implements LanguageGenerator {
       case 'uncheck':
         return `${subject}.${this._asLocator(action.selector)}.uncheck()`;
       case 'fill':
-        return `${subject}.${this._asLocator(action.selector)}.fill(${quote(action.text)})`;
+        // Retrieve the dynamic value index
+        let index: number;
+        if (typeof action.text === 'string' && action.text in valueIndex) {
+          index = valueIndex[action.text];
+        } else {
+          index = +action.text; // Assuming action.text can be an index directly if not a string
+        }
+        // Adjust the function name and syntax based on how you handle 'fill' in your codebase
+        return `await ${subject}.${this._asLocator(action.selector)}.fill(dynamicValues[${index}]);`;
       case 'setInputFiles':
         return `${subject}.${this._asLocator(action.selector)}.set_input_files(${formatValue(action.files.length === 1 ? action.files[0] : action.files)})`;
       case 'press': {

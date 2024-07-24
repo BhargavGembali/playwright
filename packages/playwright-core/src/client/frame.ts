@@ -36,6 +36,7 @@ import { urlMatches } from '../utils/network';
 import type * as api from '../../types/types';
 import type * as structs from '../../types/structs';
 import { addSourceUrlToScript } from './clientHelper';
+import { dynamicValues } from './dynamicValues';
 
 export type WaitForNavigationOptions = {
   timeout?: number,
@@ -297,9 +298,17 @@ export class Frame extends ChannelOwner<channels.FrameChannel> implements api.Fr
     return await this._channel.tap({ selector, ...options });
   }
 
-  async fill(selector: string, value: string, options: channels.FrameFillOptions = {}) {
-    return await this._channel.fill({ selector, value, ...options });
+async fill(value: string | number, options: channels.ElementHandleFillOptions = {}): Promise<void> {
+  let actualValue: string;
+  if (typeof value === 'number') {
+    actualValue = dynamicValues[value];
+  } else {
+    actualValue = value;
   }
+  this.storeTypedValue(actualValue);
+  return await this._frame.fill(this._selector, { strict: true, ...options, value: actualValue });
+}
+
 
   async _highlight(selector: string) {
     return await this._channel.highlight({ selector });

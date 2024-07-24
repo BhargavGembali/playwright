@@ -1,23 +1,8 @@
-/**
- * Copyright (c) Microsoft Corporation.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 import { EventEmitter } from 'events';
 import type { BrowserContextOptions, LaunchOptions } from '../../..';
 import type { Frame } from '../frames';
 import type { LanguageGenerator, LanguageGeneratorOptions } from './language';
+import { dynamicValues, valueIndex } from '../../client/dynamicValues'; 
 import type { Action, Signal, FrameDescription } from './recorderActions';
 
 export type ActionInContext = {
@@ -65,8 +50,19 @@ export class CodeGenerator extends EventEmitter {
   willPerformAction(action: ActionInContext) {
     if (!this._enabled)
       return;
+
+    // Handle dynamic values
+    if (action.action.name === 'fill' && typeof action.action.text === 'string') {
+      const text = action.action.text;
+      if (!(text in valueIndex)) {
+        dynamicValues.push(text);
+        valueIndex[text] = dynamicValues.length - 1;
+      }
+    }
+
     this._currentAction = action;
   }
+
 
   performedActionFailed(action: ActionInContext) {
     if (!this._enabled)
@@ -83,10 +79,14 @@ export class CodeGenerator extends EventEmitter {
     if (this._lastAction && this._lastAction.frame.pageAlias === actionInContext.frame.pageAlias) {
       const lastAction = this._lastAction.action;
       // We augment last action based on the type.
-      if (this._lastAction && action.name === 'fill' && lastAction.name === 'fill') {
-        if (action.selector === lastAction.selector)
-          eraseLastAction = true;
+      if (action.name === 'fill' && typeof action.text === 'string') {
+        const text = action.text;
+        if (!(text in valueIndex)) {
+          dynamicValues.push(text);
+          valueIndex[text] = dynamicValues.length - 1;
+        }
       }
+  
       if (lastAction && action.name === 'click' && lastAction.name === 'click') {
         if (action.selector === lastAction.selector && action.clickCount > lastAction.clickCount)
           eraseLastAction = true;
@@ -161,8 +161,9 @@ export class CodeGenerator extends EventEmitter {
   generateStructure(languageGenerator: LanguageGenerator) {
     const header = languageGenerator.generateHeader(this._options);
     const footer = languageGenerator.generateFooter(this._options.saveStorage);
+    const dynamicValuesInit = `const dynamicValues = [\n${dynamicValues.map(v => `  '${v}'`).join(',\n')}\n];\n`;
     const actions = this._actions.map(a => languageGenerator.generateAction(a)).filter(Boolean);
-    const text = [header, ...actions, footer].join('\n');
+    const text = [header, dynamicValuesInit, ...actions, footer].join('\n');
     return { header, footer, actions, text };
   }
 }

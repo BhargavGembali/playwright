@@ -35,6 +35,7 @@ import { promisify } from 'util';
 const pipelineAsync = promisify(pipeline);
 
 export class ElementHandle<T extends Node = Node> extends JSHandle<T> implements api.ElementHandle {
+  [x: string]: any;
   readonly _elementChannel: channels.ElementHandleChannel;
 
   static override from(handle: channels.ElementHandleChannel): ElementHandle {

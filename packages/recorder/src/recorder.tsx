@@ -1,31 +1,17 @@
-/*
-  Copyright (c) Microsoft Corporation.
-
-  Licensed under the Apache License, Version 2.0 (the "License");
-  you may not use this file except in compliance with the License.
-  You may obtain a copy of the License at
-
-      http://www.apache.org/licenses/LICENSE-2.0
-
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
-*/
-
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
+import { VariablePopup } from './variablePopUp'; // Import the popup component
 import type { CallLog, Mode, Source } from './recorderTypes';
 import { CodeMirrorWrapper } from '@web/components/codeMirrorWrapper';
 import { SplitView } from '@web/components/splitView';
 import { TabbedPane } from '@web/components/tabbedPane';
 import { Toolbar } from '@web/components/toolbar';
 import { ToolbarButton, ToolbarSeparator } from '@web/components/toolbarButton';
-import * as React from 'react';
 import { CallLogView } from './callLog';
 import './recorder.css';
 import { asLocator } from '@isomorphic/locatorGenerators';
 import { toggleTheme } from '@web/theme';
 import { copy } from '@web/uiUtils';
+import { VariablePopupProps } from './types'; // Import the types
 
 declare global {
   interface Window {
@@ -48,10 +34,14 @@ export const Recorder: React.FC<RecorderProps> = ({
   log,
   mode,
 }) => {
-  const [fileId, setFileId] = React.useState<string | undefined>();
-  const [selectedTab, setSelectedTab] = React.useState<string>('log');
+  const [fileId, setFileId] = useState<string | undefined>();
+  const [selectedTab, setSelectedTab] = useState<string>('log');
+  const [locator, setLocator] = useState('');
+  const [isPopupVisible, setPopupVisible] = useState(false);
+  const [currentFillSelector, setCurrentFillSelector] = useState('');
+  const [dynamicVariables, setDynamicVariables] = useState({});
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!fileId && sources.length > 0)
       setFileId(sources[0].id);
   }, [fileId, sources]);
@@ -64,8 +54,7 @@ export const Recorder: React.FC<RecorderProps> = ({
     label: '',
     highlight: []
   };
-
-  const [locator, setLocator] = React.useState('');
+  
   window.playwrightSetSelector = (selector: string, focus?: boolean) => {
     const language = source.language;
     if (focus)
@@ -75,19 +64,16 @@ export const Recorder: React.FC<RecorderProps> = ({
 
   window.playwrightSetFileIfNeeded = (value: string) => {
     const newSource = sources.find(s => s.id === value);
-    // Do not forcefully switch between two recorded sources, because
-    // user did explicitly choose one.
     if (newSource && !newSource.isRecorded || !source.isRecorded)
       setFileId(value);
   };
 
-  const messagesEndRef = React.useRef<HTMLDivElement>(null);
-  React.useLayoutEffect(() => {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: 'center', inline: 'nearest' });
   }, [messagesEndRef]);
 
-
-  React.useEffect(() => {
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       switch (event.key) {
         case 'F8':
@@ -108,103 +94,124 @@ export const Recorder: React.FC<RecorderProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [paused]);
 
-  const onEditorChange = React.useCallback((selector: string) => {
+  const onEditorChange = useCallback((selector: string) => {
     if (mode === 'none')
       window.dispatch({ event: 'setMode', params: { mode: 'standby' } });
     setLocator(selector);
     window.dispatch({ event: 'selectorUpdated', params: { selector } });
   }, [mode]);
 
-  return <div className='recorder'>
-    <Toolbar>
-      <ToolbarButton icon='circle-large-filled' title='Record' toggled={mode === 'recording' || mode === 'recording-inspecting' || mode === 'assertingText' || mode === 'assertingVisibility'} onClick={() => {
-        window.dispatch({ event: 'setMode', params: { mode: mode === 'none' || mode === 'standby' || mode === 'inspecting' ? 'recording' : 'standby' } });
-      }}>Record</ToolbarButton>
-      <ToolbarSeparator />
-      <ToolbarButton icon='inspect' title='Pick locator' toggled={mode === 'inspecting' || mode === 'recording-inspecting'} onClick={() => {
-        const newMode = {
-          'inspecting': 'standby',
-          'none': 'inspecting',
-          'standby': 'inspecting',
-          'recording': 'recording-inspecting',
-          'recording-inspecting': 'recording',
-          'assertingText': 'recording-inspecting',
-          'assertingVisibility': 'recording-inspecting',
-          'assertingValue': 'recording-inspecting',
-        }[mode];
-        window.dispatch({ event: 'setMode', params: { mode: newMode } }).catch(() => { });
-      }}></ToolbarButton>
-      <ToolbarButton icon='eye' title='Assert visibility' toggled={mode === 'assertingVisibility'} disabled={mode === 'none' || mode === 'standby' || mode === 'inspecting'} onClick={() => {
-        window.dispatch({ event: 'setMode', params: { mode: mode === 'assertingVisibility' ? 'recording' : 'assertingVisibility' } });
-      }}></ToolbarButton>
-      <ToolbarButton icon='whole-word' title='Assert text' toggled={mode === 'assertingText'} disabled={mode === 'none' || mode === 'standby' || mode === 'inspecting'} onClick={() => {
-        window.dispatch({ event: 'setMode', params: { mode: mode === 'assertingText' ? 'recording' : 'assertingText' } });
-      }}></ToolbarButton>
-      <ToolbarButton icon='symbol-constant' title='Assert value' toggled={mode === 'assertingValue'} disabled={mode === 'none' || mode === 'standby' || mode === 'inspecting'} onClick={() => {
-        window.dispatch({ event: 'setMode', params: { mode: mode === 'assertingValue' ? 'recording' : 'assertingValue' } });
-      }}></ToolbarButton>
-      <ToolbarSeparator />
-      <ToolbarButton icon='files' title='Copy' disabled={!source || !source.text} onClick={() => {
-        copy(source.text);
-      }}></ToolbarButton>
-      <ToolbarButton icon='debug-continue' title='Resume (F8)' disabled={!paused} onClick={() => {
-        window.dispatch({ event: 'resume' });
-      }}></ToolbarButton>
-      <ToolbarButton icon='debug-pause' title='Pause (F8)' disabled={paused} onClick={() => {
-        window.dispatch({ event: 'pause' });
-      }}></ToolbarButton>
-      <ToolbarButton icon='debug-step-over' title='Step over (F10)' disabled={!paused} onClick={() => {
-        window.dispatch({ event: 'step' });
-      }}></ToolbarButton>
-      <div style={{ flex: 'auto' }}></div>
-      <div>Target:</div>
-      <select className='recorder-chooser' hidden={!sources.length} value={fileId} onChange={event => {
-        setFileId(event.target.selectedOptions[0].value);
-        window.dispatch({ event: 'fileChanged', params: { file: event.target.selectedOptions[0].value } });
-      }}>{renderSourceOptions(sources)}</select>
-      <ToolbarButton icon='clear-all' title='Clear' disabled={!source || !source.text} onClick={() => {
-        window.dispatch({ event: 'clear' });
-      }}></ToolbarButton>
-      <ToolbarButton icon='color-mode' title='Toggle color mode' toggled={false} onClick={() => toggleTheme()}></ToolbarButton>
-    </Toolbar>
-    <SplitView sidebarSize={200}>
-      <CodeMirrorWrapper text={source.text} language={source.language} highlight={source.highlight} revealLine={source.revealLine} readOnly={true} lineNumbers={true}/>
-      <TabbedPane
-        rightToolbar={selectedTab === 'locator' ? [<ToolbarButton icon='files' title='Copy' onClick={() => copy(locator)} />] : []}
-        tabs={[
-          {
-            id: 'locator',
-            title: 'Locator',
-            render: () => <CodeMirrorWrapper text={locator} language={source.language} readOnly={false} focusOnChange={true} onChange={onEditorChange} wrapLines={true}/>
-          },
-          {
-            id: 'log',
-            title: 'Log',
-            render: () => <CallLogView language={source.language} log={Array.from(log.values())}/>
-          },
-        ]}
-        selectedTab={selectedTab}
-        setSelectedTab={setSelectedTab}
-      />
-    </SplitView>
-  </div>;
-};
+  const handleFill = (selector: string) => {
+    setCurrentFillSelector(selector);
+    setPopupVisible(true);
+  };
 
-function renderSourceOptions(sources: Source[]): React.ReactNode {
-  const transformTitle = (title: string): string => title.replace(/.*[/\\]([^/\\]+)/, '$1');
-  const renderOption = (source: Source): React.ReactNode => (
-    <option key={source.id} value={source.id}>{transformTitle(source.label)}</option>
+  const handlePopupClose = () => {
+    setPopupVisible(false);
+  };
+
+  const handlePopupSave = (variableName: string) => {
+    setDynamicVariables((prevVariables) => ({
+      ...prevVariables,
+      [variableName]: currentFillSelector
+    }));
+    setPopupVisible(false);
+    window.dispatch({ event: 'fillVariableAdded', params: { variableName, selector: currentFillSelector } });
+  };
+
+  return (
+    <div className='recorder'>
+      <Toolbar>
+        <ToolbarButton icon='circle-large-filled' title='Record' toggled={mode === 'recording' || mode === 'recording-inspecting' || mode === 'assertingText' || mode === 'assertingVisibility'} onClick={() => {
+          window.dispatch({ event: 'setMode', params: { mode: mode === 'none' || mode === 'standby' || mode === 'inspecting' ? 'recording' : 'standby' } });
+        }}>Record</ToolbarButton>
+        <ToolbarSeparator />
+        <ToolbarButton icon='inspect' title='Pick locator' toggled={mode === 'inspecting' || mode === 'recording-inspecting'} onClick={() => {
+          const newMode = {
+            'inspecting': 'standby',
+            'none': 'inspecting',
+            'standby': 'inspecting',
+            'recording': 'recording-inspecting',
+            'recording-inspecting': 'recording',
+            'assertingText': 'recording-inspecting',
+            'assertingVisibility': 'recording-inspecting',
+            'assertingValue': 'recording-inspecting',
+          }[mode];
+          window.dispatch({ event: 'setMode', params: { mode: newMode } }).catch(() => { });
+        }}></ToolbarButton>
+        <ToolbarButton icon='eye' title='Assert visibility' toggled={mode === 'assertingVisibility'} disabled={mode === 'none' || mode === 'standby' || mode === 'inspecting'} onClick={() => {
+          window.dispatch({ event: 'setMode', params: { mode: mode === 'assertingVisibility' ? 'recording' : 'assertingVisibility' } });
+        }}></ToolbarButton>
+        <ToolbarButton icon='whole-word' title='Assert text' toggled={mode === 'assertingText'} disabled={mode === 'none' || mode === 'standby' || mode === 'inspecting'} onClick={() => {
+          window.dispatch({ event: 'setMode', params: { mode: mode === 'assertingText' ? 'recording' : 'assertingText' } });
+        }}></ToolbarButton>
+        <ToolbarButton icon='symbol-constant' title='Assert value' toggled={mode === 'assertingValue'} disabled={mode === 'none' || mode === 'standby' || mode === 'inspecting'} onClick={() => {
+          window.dispatch({ event: 'setMode', params: { mode: mode === 'assertingValue' ? 'recording' : 'assertingValue' } });
+        }}></ToolbarButton>
+        <ToolbarSeparator />
+        <ToolbarButton icon='files' title='Copy' disabled={!source || !source.text} onClick={() => {
+          copy(source.text);
+        }}></ToolbarButton>
+        <ToolbarButton icon='debug-continue' title='Resume (F8)' disabled={!paused} onClick={() => {
+          window.dispatch({ event: 'resume' });
+        }}></ToolbarButton>
+        <ToolbarButton icon='debug-pause' title='Pause (F8)' disabled={paused} onClick={() => {
+          window.dispatch({ event: 'pause' });
+        }}></ToolbarButton>
+        <ToolbarButton icon='debug-step-over' title='Step over (F10)' disabled={!paused} onClick={() => {
+          window.dispatch({ event: 'step' });
+        }}></ToolbarButton>
+        <ToolbarSeparator />
+        <ToolbarButton icon='wand' title='Toggle theme' onClick={() => {
+          toggleTheme();
+        }}></ToolbarButton>
+      </Toolbar>
+      <div className='recorder-content'>
+        <SplitView sidebarSize={250}>
+          <SplitView.Sidebar>
+            <TabbedPane
+              tabs={[
+                { id: 'log', title: 'Log' },
+                { id: 'source', title: 'Source' },
+                { id: 'locator', title: 'Locator' },
+              ]}
+              selectedTab={selectedTab}
+              setSelectedTab={setSelectedTab}
+            />
+            <div className='recorder-log'>
+              <CallLogView log={log} />
+              <div ref={messagesEndRef} />
+            </div>
+          </SplitView.Sidebar>
+          <SplitView.Main>
+            {selectedTab === 'log' && (
+              <div className='recorder-log'>
+                <CallLogView log={log} />
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+            {selectedTab === 'source' && (
+              <CodeMirrorWrapper
+                value={source.text}
+                language={source.language}
+                onChange={(text) => window.dispatch({ event: 'sourceChanged', params: { text, id: fileId } })}
+              />
+            )}
+            {selectedTab === 'locator' && (
+              <div className='recorder-locator'>
+                <CodeMirrorWrapper
+                  value={locator}
+                  language={source.language}
+                  onChange={onEditorChange}
+                />
+              </div>
+            )}
+          </SplitView.Main>
+        </SplitView>
+      </div>
+      {isPopupVisible && (
+        <VariablePopup onClose={handlePopupClose} onSave={handlePopupSave} />
+      )}
+    </div>
   );
-
-  const hasGroup = sources.some(s => s.group);
-  if (hasGroup) {
-    const groups = new Set(sources.map(s => s.group));
-    return [...groups].filter(Boolean).map(group => (
-      <optgroup label={group} key={group}>
-        {sources.filter(s => s.group === group).map(source => renderOption(source))}
-      </optgroup>
-    ));
-  }
-
-  return sources.map(source => renderOption(source));
-}
+};

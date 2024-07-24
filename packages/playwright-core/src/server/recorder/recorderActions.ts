@@ -32,6 +32,7 @@ export type ActionName =
   'assertChecked' |
   'assertVisible';
 
+
 export type ActionBase = {
   name: ActionName,
   signals: Signal[],
@@ -40,7 +41,7 @@ export type ActionBase = {
 export type ClickAction = ActionBase & {
   name: 'click',
   selector: string,
-  button: 'left' | 'middle' | 'right',
+  button: 'left' | 'iddle' | 'right',
   modifiers: number,
   clickCount: number,
   position?: Point,
@@ -56,11 +57,18 @@ export type UncheckAction = ActionBase & {
   selector: string,
 };
 
+
+
 export type FillAction = ActionBase & {
   name: 'fill',
   selector: string,
-  text: string,
+  text: DynamicVariables,
 };
+
+// In recorderActions.ts or relevant type definitions file
+export type DynamicVariables = string | number;
+
+
 
 export type NavigateAction = ActionBase & {
   name: 'navigate',

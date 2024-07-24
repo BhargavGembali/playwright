@@ -24,6 +24,7 @@ import { toModifiers } from './utils';
 import { escapeWithQuotes } from '../../utils/isomorphic/stringUtils';
 import { deviceDescriptors } from '../deviceDescriptors';
 import { asLocator } from '../../utils/isomorphic/locatorGenerators';
+import { dynamicValues, valueIndex } from '../../client/dynamicValues'; 
 
 type CSharpLanguageMode = 'library' | 'mstest' | 'nunit';
 
@@ -141,8 +142,16 @@ export class CSharpLanguageGenerator implements LanguageGenerator {
         return `await ${subject}.${this._asLocator(action.selector)}.CheckAsync();`;
       case 'uncheck':
         return `await ${subject}.${this._asLocator(action.selector)}.UncheckAsync();`;
-      case 'fill':
-        return `await ${subject}.${this._asLocator(action.selector)}.FillAsync(${quote(action.text)});`;
+        case 'fill':
+          // Retrieve the dynamic value index
+          let index: number;
+          if (typeof action.text === 'string' && action.text in valueIndex) {
+            index = valueIndex[action.text];
+          } else {
+            index = +action.text; // Assuming action.text can be an index directly if not a string
+          }
+          // Adjust the function name and syntax based on how you handle 'fill' in your codebase
+          return `await ${subject}.${this._asLocator(action.selector)}.fill(dynamicValues[${index}]);`;
       case 'setInputFiles':
         return `await ${subject}.${this._asLocator(action.selector)}.SetInputFilesAsync(${formatObject(action.files)});`;
       case 'press': {

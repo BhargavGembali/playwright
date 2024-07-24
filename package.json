@@ -99,5 +99,10 @@
     "ws": "^8.17.1",
     "xml2js": "^0.5.0",
     "yaml": "^2.2.2"
+  },
+  "dependencies": {
+    "antd": "^5.19.3",
+    "playwright": "^1.46.0-next",
+    "prompt-sync": "^4.2.0"
   }
 }

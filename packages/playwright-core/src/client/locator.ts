@@ -25,6 +25,7 @@ import type { FilePayload, FrameExpectOptions, Rect, SelectOption, SelectOptionO
 import { parseResult, serializeArgument } from './jsHandle';
 import { escapeForTextSelector } from '../utils/isomorphic/stringUtils';
 import type { ByRoleOptions } from '../utils/isomorphic/locatorUtils';
+import { dynamicValues } from './dynamicValues';
 import { getByAltTextSelector, getByLabelSelector, getByPlaceholderSelector, getByRoleSelector, getByTestIdSelector, getByTextSelector, getByTitleSelector } from '../utils/isomorphic/locatorUtils';
 
 export type LocatorOptions = {
@@ -37,10 +38,12 @@ export type LocatorOptions = {
 export class Locator implements api.Locator {
   _frame: Frame;
   _selector: string;
+  private _typedValues: Map<string, string>;
 
   constructor(frame: Frame, selector: string, options?: LocatorOptions) {
     this._frame = frame;
     this._selector = selector;
+    this._typedValues = new Map();
 
     if (options?.hasText)
       this._selector += ` >> internal:has-text=${escapeForTextSelector(options.hasText, false)}`;
@@ -78,6 +81,10 @@ export class Locator implements api.Locator {
         await handle.dispose();
       }
     });
+  }
+
+  private storeTypedValue(value: string) {
+    this._typedValues.set(this._selector, value);
   }
 
   _equals(locator: Locator) {
@@ -127,16 +134,21 @@ export class Locator implements api.Locator {
     return await this._withElement(h => h.evaluateHandle(pageFunction, arg), options?.timeout);
   }
 
-  async fill(value: string, options: channels.ElementHandleFillOptions = {}): Promise<void> {
-    return await this._frame.fill(this._selector, value, { strict: true, ...options });
+  async fill(value: string | number, options: channels.ElementHandleFillOptions = {}): Promise<void> {
+    let actualValue: string;
+    if (typeof value === 'number') {
+      actualValue = dynamicValues[value];
+    } else {
+      actualValue = value;
+    }
+    this.storeTypedValue(actualValue);   
+    return await this._frame.fill(this._selector, { strict: true, ...options, value: actualValue });
   }
-
+  
   async clear(options: channels.ElementHandleFillOptions = {}): Promise<void> {
     return await this.fill('', options);
   }
-
   async _highlight() {
-    // VS Code extension uses this one, keep it for now.
     return await this._frame._highlight(this._selector);
   }
 
@@ -442,3 +454,4 @@ export function testIdAttributeName(): string {
 export function setTestIdAttribute(attributeName: string) {
   _testIdAttributeName = attributeName;
 }
+
